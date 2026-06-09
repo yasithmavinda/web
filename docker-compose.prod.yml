@@ -1,0 +1,79 @@
+# ════════════════════════════════════════════════════════════════
+# docker-compose.prod.yml — Production Overrides
+# ════════════════════════════════════════════════════════════════
+#
+# HOW TO USE:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# This file OVERRIDES settings from docker-compose.yml.
+# Only specify what CHANGES in production.
+#
+# DIFFERENCES in Production vs Development:
+#   ✓ No SQL Server port exposed to internet (security!)
+#   ✓ Strict resource limits (prevent runaway containers)
+#   ✓ Log rotation (prevent disk from filling up)
+#   ✓ Always restart on failure
+#   ✓ No build — uses pre-built images from registry
+
+version: "3.9"
+
+services:
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    ports: []          # ← Remove port exposure in production (DB not public)
+    environment:
+      ACCEPT_EULA:  "Y"
+      MSSQL_PID:    Standard
+      SA_PASSWORD:  ${SQL_SA_PASSWORD}   # No default — MUST be set in prod!
+    deploy:
+      resources:
+        limits:
+          cpus:   "2"
+          memory: 2G
+        reservations:
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  backend:
+    image: ${REGISTRY:-ghcr.io}/YOUR_ORG/taskflow-backend:${VERSION:-latest}
+    build: null    # Don't build — pull from registry
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+    deploy:
+      replicas: 2    # Run 2 backend instances for high availability
+      resources:
+        limits:
+          cpus:   "1"
+          memory: 512M
+        reservations:
+          memory: 256M
+      restart_policy:
+        condition:   on-failure
+        delay:       5s
+        max_attempts: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "10"
+
+  frontend:
+    image: ${REGISTRY:-ghcr.io}/YOUR_ORG/taskflow-frontend:${VERSION:-latest}
+    build: null    # Don't build — pull from registry
+    deploy:
+      resources:
+        limits:
+          cpus:   "0.5"
+          memory: 128M
+        reservations:
+          memory: 64M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"

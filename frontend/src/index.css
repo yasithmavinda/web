@@ -1,0 +1,134 @@
+/* ── Google Font Import — MUST be first before @tailwind ────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+/* ── Tailwind Directives ─────────────────────────────────────── */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── CSS Custom Properties (Design Tokens) ───────────────────── */
+:root {
+  --sidebar-width:       260px;
+  --sidebar-collapsed:   72px;
+  --header-height:       64px;
+  --transition-fast:     150ms ease;
+  --transition-normal:   250ms ease;
+  --transition-slow:     400ms ease;
+}
+
+/* ── Base Styles ─────────────────────────────────────────────── */
+@layer base {
+  * {
+    border-color: rgba(255,255,255,0.08);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-surface-900 text-white font-sans;
+    font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar       { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-white/20 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-white/30; }
+
+  /* Focus ring — visible for accessibility */
+  :focus-visible {
+    @apply outline-none ring-2 ring-primary-500 ring-offset-2 ring-offset-surface-900;
+  }
+}
+
+/* ── Component Classes ────────────────────────────────────────── */
+@layer components {
+  /* Glass morphism card */
+  .glass {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10;
+  }
+
+  .glass-dark {
+    @apply bg-surface-800/80 backdrop-blur-xl border;
+    border-color: rgba(255,255,255,0.08);
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-primary-400 to-violet-400 bg-clip-text text-transparent;
+  }
+
+  /* Skeleton loading animation */
+  .skeleton {
+    @apply bg-gradient-to-r from-white/5 via-white/10 to-white/5;
+    background-size: 200% 100%;
+    @apply animate-shimmer;
+  }
+
+  /* Sidebar nav item */
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
+           text-white/60 hover:text-white
+           transition-all duration-150 cursor-pointer select-none;
+    &:hover { background-color: rgba(255,255,255,0.08); }
+  }
+  .nav-item.active {
+    @apply text-white bg-primary-500/20 border border-primary-500/30;
+  }
+
+  /* Status badge base */
+  .status-badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold;
+  }
+
+  /* Priority dot */
+  .priority-dot {
+    @apply w-2 h-2 rounded-full flex-shrink-0;
+  }
+
+  /* Card hover effect */
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-card-lg hover:-translate-y-0.5;
+  }
+}
+
+/* ── Utility Overrides ────────────────────────────────────────── */
+@layer utilities {
+  /* Thin border with subtle glow */
+  .border-glow {
+    box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.4),
+                0 0 12px rgba(99, 102, 241, 0.15);
+  }
+
+  /* Text shadow for headings */
+  .text-shadow {
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  }
+
+  /* Prevent text selection on drag elements */
+  .no-select {
+    @apply select-none;
+  }
+}
+
+/* ── Kanban Column ────────────────────────────────────────────── */
+.kanban-column {
+  @apply flex flex-col gap-3 min-h-[200px] p-3 rounded-2xl;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.kanban-card {
+  @apply glass rounded-xl p-4 cursor-grab active:cursor-grabbing
+         hover:border-primary-500/30 hover:shadow-glow-sm
+         transition-all duration-200;
+}
+
+/* ── React Hot Toast Overrides ────────────────────────────────── */
+.toast-custom {
+  @apply !bg-surface-800 !text-white !border !border-white/10 !rounded-xl !shadow-card-lg;
+}

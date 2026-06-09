@@ -1,0 +1,37 @@
+# .dockerignore — Frontend
+# Excludes heavy node_modules (npm install runs inside Docker)
+
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output (Vite does the build inside Docker)
+dist/
+build/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+
+# Git
+.git/
+.gitignore
+
+# Docker files
+Dockerfile*
+.dockerignore
+nginx.conf    # Copied explicitly in Dockerfile — no need in context
+
+# Tests
+*.test.js
+*.spec.js
+coverage/
+
+# Docs
+*.md

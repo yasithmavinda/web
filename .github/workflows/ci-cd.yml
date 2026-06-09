@@ -1,0 +1,348 @@
+# ════════════════════════════════════════════════════════════════
+# GitHub Actions — CI/CD Pipeline
+# ════════════════════════════════════════════════════════════════
+#
+# WHAT IS CI/CD?
+# ──────────────
+# CI (Continuous Integration):
+#   Every time you push code → automatically:
+#     1. Run tests
+#     2. Build Docker images
+#     3. Check for problems
+#   "Catch bugs early, before they reach users"
+#
+# CD (Continuous Deployment):
+#   On every merge to main branch → automatically:
+#     1. Build production Docker images
+#     2. Push to container registry
+#     3. Deploy to Azure
+#   "Ship code to users automatically, every time"
+#
+# PIPELINE FLOW:
+# ──────────────────────────────────────────────────────────────
+#  Push to any branch       Push to main branch
+#         │                        │
+#         ▼                        ▼
+#  ┌─────────────┐         ┌─────────────────────┐
+#  │  CI (Test)  │         │  CI (Test) + CD      │
+#  │  ─────────  │         │  ──────────────────  │
+#  │  Build .NET │         │  Build .NET + React  │
+#  │  Run tests  │         │  Run tests           │
+#  │  Build imgs │         │  Push to registry    │
+#  └─────────────┘         │  Deploy to Azure     │
+#                          └─────────────────────┘
+#
+# SECRETS (Settings → Secrets → Actions in your GitHub repo):
+# ───────────────────────────────────────────────────────────
+#   AZURE_CREDENTIALS      → Azure service principal JSON
+#   AZURE_BACKEND_APP      → App Service name (backend)
+#   AZURE_FRONTEND_APP     → App Service name (frontend)
+#   AZURE_RESOURCE_GROUP   → Resource group name
+#   SQL_SA_PASSWORD        → Database password
+#   JWT_SECRET             → JWT signing key
+
+name: TaskFlow CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:   # Allow manual trigger from GitHub UI
+
+env:
+  REGISTRY:         ghcr.io
+  BACKEND_IMAGE:    ghcr.io/${{ github.repository_owner }}/taskflow-backend
+  FRONTEND_IMAGE:   ghcr.io/${{ github.repository_owner }}/taskflow-frontend
+  DOTNET_VERSION:   "8.0.x"
+  NODE_VERSION:     "20"
+
+# ════════════════════════════════════════════════════════════════
+# JOB 1: BACKEND CI — Build, Test, Analyze
+# ════════════════════════════════════════════════════════════════
+jobs:
+  backend-ci:
+    name: "🔧 Backend — Build & Test"
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Download your code to the GitHub runner machine
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Install the .NET SDK
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # 3. Cache NuGet packages (avoid re-downloading every time)
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key:  ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      # 4. Restore dependencies
+      - name: Restore dependencies
+        run: dotnet restore
+        working-directory: backend
+
+      # 5. Build in Release mode
+      - name: Build
+        run: dotnet build --no-restore -c Release
+        working-directory: backend
+
+      # 6. Run all unit and integration tests
+      - name: Run tests
+        run: |
+          dotnet test \
+            --no-build \
+            -c Release \
+            --logger "trx;LogFileName=test-results.trx" \
+            --collect:"XPlat Code Coverage" \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
+        working-directory: backend
+
+      # 7. Publish test results to GitHub (shows pass/fail in PR)
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name:              ".NET Tests"
+          path:              "backend/**/*.trx"
+          reporter:          dotnet-trx
+          fail-on-error:     false
+
+      # 8. Upload coverage report
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files:   backend/**/coverage.cobertura.xml
+          flags:   backend
+
+  # ════════════════════════════════════════════════════════════
+  # JOB 2: FRONTEND CI — Install, Lint, Test, Build
+  # ════════════════════════════════════════════════════════════
+  frontend-ci:
+    name: "⚛️ Frontend — Build & Test"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache:        npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --frozen-lockfile
+        working-directory: frontend
+
+      - name: Lint (ESLint)
+        run: npm run lint
+        working-directory: frontend
+        continue-on-error: true   # Don't fail build on lint warnings
+
+      - name: Type check
+        run: npm run type-check
+        working-directory: frontend
+        continue-on-error: true
+
+      - name: Run tests
+        run: npm run test -- --run --reporter=verbose
+        working-directory: frontend
+        env:
+          CI: true
+
+      - name: Build production bundle
+        run: npm run build
+        working-directory: frontend
+        env:
+          VITE_API_URL:   /api/v1
+          VITE_APP_NAME:  TaskFlow
+
+      # Check final bundle size
+      - name: Analyze bundle size
+        run: |
+          echo "=== Build Output ==="
+          du -sh dist/
+          echo ""
+          echo "=== JS/CSS Files ==="
+          find dist -name "*.js" -o -name "*.css" | xargs ls -lh 2>/dev/null
+        working-directory: frontend
+
+  # ════════════════════════════════════════════════════════════
+  # JOB 3: DOCKER BUILD & PUSH (only on main branch)
+  # ════════════════════════════════════════════════════════════
+  docker-build-push:
+    name: "🐳 Docker — Build & Push"
+    runs-on: ubuntu-latest
+    needs: [backend-ci, frontend-ci]   # Only runs if both CI jobs pass
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    permissions:
+      contents:  read
+      packages:  write       # Needed to push to GitHub Container Registry
+
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tags:    ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Set up Docker Buildx for multi-platform builds
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Login to GitHub Container Registry (ghcr.io)
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}   # Automatically provided by GitHub
+
+      # Generate tags: latest, v1.2.3, sha-abc1234
+      - name: Extract metadata (backend)
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.BACKEND_IMAGE }}
+          tags:   |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=sha,prefix=sha-,format=short
+
+      - name: Extract metadata (frontend)
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.FRONTEND_IMAGE }}
+          tags:   |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=sha,prefix=sha-,format=short
+
+      # Build and push backend image
+      - name: Build & Push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context:      ./backend
+          dockerfile:   ./backend/Dockerfile
+          push:         true
+          tags:         ${{ steps.meta-backend.outputs.tags }}
+          labels:       ${{ steps.meta-backend.outputs.labels }}
+          target:       runtime
+          # Cache layers from the registry for faster builds
+          cache-from:   type=registry,ref=${{ env.BACKEND_IMAGE }}:buildcache
+          cache-to:     type=registry,ref=${{ env.BACKEND_IMAGE }}:buildcache,mode=max
+
+      # Build and push frontend image
+      - name: Build & Push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context:      ./frontend
+          dockerfile:   ./frontend/Dockerfile
+          push:         true
+          tags:         ${{ steps.meta-frontend.outputs.tags }}
+          labels:       ${{ steps.meta-frontend.outputs.labels }}
+          build-args:   |
+            VITE_API_URL=/api/v1
+            VITE_APP_NAME=TaskFlow
+          cache-from:   type=registry,ref=${{ env.FRONTEND_IMAGE }}:buildcache
+          cache-to:     type=registry,ref=${{ env.FRONTEND_IMAGE }}:buildcache,mode=max
+
+  # ════════════════════════════════════════════════════════════
+  # JOB 4: DEPLOY TO AZURE
+  # ════════════════════════════════════════════════════════════
+  deploy-azure:
+    name: "☁️ Deploy to Azure"
+    runs-on: ubuntu-latest
+    needs: [docker-build-push]
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production          # GitHub environment (requires approval)
+      url:  https://taskflow.yourdomain.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Login to Azure using service principal credentials
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # Deploy backend to Azure Web App for Containers
+      - name: Deploy Backend to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name:        ${{ secrets.AZURE_BACKEND_APP }}
+          images:          ${{ env.BACKEND_IMAGE }}:latest
+          slot-name:       production
+
+      # Set backend environment variables in Azure
+      - name: Configure Backend App Settings
+        uses: azure/appservice-settings@v1
+        with:
+          app-name:        ${{ secrets.AZURE_BACKEND_APP }}
+          app-settings-json: |
+            [
+              { "name": "ASPNETCORE_ENVIRONMENT", "value": "Production", "slotSetting": false },
+              { "name": "ConnectionStrings__DefaultConnection", "value": "${{ secrets.AZURE_SQL_CONNECTION }}", "slotSetting": false },
+              { "name": "JwtSettings__SecretKey", "value": "${{ secrets.JWT_SECRET }}", "slotSetting": false },
+              { "name": "JwtSettings__Issuer",    "value": "TaskFlow",     "slotSetting": false },
+              { "name": "JwtSettings__Audience",  "value": "TaskFlowApp",  "slotSetting": false },
+              { "name": "AllowedOrigins",          "value": "https://taskflow.yourdomain.com", "slotSetting": false }
+            ]
+
+      # Deploy frontend to Azure Static Web Apps (or App Service)
+      - name: Deploy Frontend to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name:  ${{ secrets.AZURE_FRONTEND_APP }}
+          images:    ${{ env.FRONTEND_IMAGE }}:latest
+
+      # Health check after deployment
+      - name: Verify Deployment
+        run: |
+          echo "⏳ Waiting for services to start..."
+          sleep 30
+
+          echo "🔍 Checking backend health..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            https://${{ secrets.AZURE_BACKEND_APP }}.azurewebsites.net/health)
+          if [ "$STATUS" != "200" ]; then
+            echo "❌ Backend health check failed (HTTP $STATUS)"
+            exit 1
+          fi
+          echo "✅ Backend healthy (HTTP $STATUS)"
+
+          echo "🔍 Checking frontend..."
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            https://${{ secrets.AZURE_FRONTEND_APP }}.azurewebsites.net)
+          echo "✅ Frontend status: HTTP $STATUS"
+
+      # Post deployment summary to GitHub
+      - name: Deployment Summary
+        run: |
+          echo "## 🚀 Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Service  | URL |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-----|" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend | https://${{ secrets.AZURE_FRONTEND_APP }}.azurewebsites.net |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend  | https://${{ secrets.AZURE_BACKEND_APP }}.azurewebsites.net |" >> $GITHUB_STEP_SUMMARY
+          echo "| Swagger  | https://${{ secrets.AZURE_BACKEND_APP }}.azurewebsites.net/swagger |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Azure Logout
+        if: always()
+        run: az logout

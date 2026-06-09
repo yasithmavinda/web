@@ -1,0 +1,49 @@
+# ════════════════════════════════════════════════════════════════
+# .dockerignore — Backend
+# ════════════════════════════════════════════════════════════════
+# Excludes files from the Docker build context.
+# Smaller build context = faster builds + smaller images.
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE files
+.vs
+.vscode
+*.user
+*.suo
+
+# Build output (we do the build inside Docker)
+**/bin/
+**/obj/
+**/publish/
+
+# Test projects
+**/*.Tests/
+**/*.Test/
+
+# Logs
+**/logs/
+*.log
+
+# Environment files (never copy secrets into images!)
+.env
+.env.*
+!.env.example
+
+# Docker files (don't recurse)
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Documentation
+*.md
+docs/
+
+# CI/CD
+.github/
+
+# Node (if any frontend tools exist in backend folder)
+node_modules/

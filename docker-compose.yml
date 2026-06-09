@@ -1,0 +1,159 @@
+# ════════════════════════════════════════════════════════════════
+# docker-compose.yml — Full Stack Orchestration
+# ════════════════════════════════════════════════════════════════
+#
+# WHAT IS DOCKER COMPOSE?
+# ────────────────────────
+# Docker Compose lets you define and run MULTIPLE containers
+# together with one command: docker compose up
+#
+# Think of it as a conductor directing an orchestra:
+#   🎹 SQL Server container  — the database
+#   🔧 Backend container     — your ASP.NET Core API
+#   ⚛️  Frontend container    — your React app via Nginx
+#
+# They all start together, talk to each other, and stop together.
+#
+# NETWORK:
+# ─────────
+# All containers share a private "taskflow-network".
+# Containers find each other by SERVICE NAME (not IP address).
+#   backend → can reach sqlserver at hostname "sqlserver:1433"
+#   frontend → can reach backend at hostname "backend:8080"
+#   Outside world → only reaches frontend via port 80
+#
+# ┌──────────────────────────────────────────────────────────┐
+# │                    taskflow-network                       │
+# │                                                           │
+# │  [sqlserver:1433] ← [backend:8080] ← [frontend:80]      │
+# │                                             ↑             │
+# │                                      Port 80 exposed     │
+# │                                      to your browser     │
+# └──────────────────────────────────────────────────────────┘
+
+version: "3.9"
+
+# ── SERVICES ─────────────────────────────────────────────────────
+services:
+
+  # ── 1. SQL SERVER DATABASE ─────────────────────────────────────
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: taskflow-sqlserver
+    environment:
+      SA_PASSWORD:          ${SQL_SA_PASSWORD:-TaskFlow@Dev123!}  # Must meet complexity requirements
+      ACCEPT_EULA:          "Y"                                    # Accept SQL Server license
+      MSSQL_PID:            Express                                # Free Express edition
+      MSSQL_COLLATION:      SQL_Latin1_General_CP1_CI_AS
+    ports:
+      - "${SQL_PORT:-1433}:1433"          # Expose for local dev tools (SSMS, Azure Data Studio)
+    volumes:
+      - sqlserver_data:/var/opt/mssql     # Persist database files on your machine
+      - ./scripts/db-init:/docker-entrypoint-initdb.d  # Auto-run SQL scripts on first start
+    networks:
+      - taskflow-network
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P '${SQL_SA_PASSWORD:-TaskFlow@Dev123!}' -Q 'SELECT 1' -No -C || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # ── 2. ASP.NET CORE BACKEND API ────────────────────────────────
+  backend:
+    build:
+      context:    ./backend           # Folder containing the Dockerfile
+      dockerfile: Dockerfile
+      target:     runtime             # Use the "runtime" stage
+    container_name: taskflow-backend
+    image: taskflow-backend:${VERSION:-latest}
+    environment:
+      ASPNETCORE_ENVIRONMENT:     ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS:            http://+:8080
+
+      # Database connection — "sqlserver" is the service name above
+      ConnectionStrings__DefaultConnection: >-
+        Server=sqlserver,1433;Database=${SQL_DB_NAME:-TaskFlowDB};
+        User Id=sa;Password=${SQL_SA_PASSWORD:-TaskFlow@Dev123!};
+        TrustServerCertificate=True;MultipleActiveResultSets=True;
+
+      # JWT Configuration
+      JwtSettings__SecretKey:          ${JWT_SECRET:-your-super-secret-key-change-this-in-production-256bits}
+      JwtSettings__Issuer:             ${JWT_ISSUER:-TaskFlow}
+      JwtSettings__Audience:           ${JWT_AUDIENCE:-TaskFlowApp}
+      JwtSettings__AccessTokenMinutes: ${JWT_ACCESS_MINUTES:-15}
+      JwtSettings__RefreshTokenDays:   ${JWT_REFRESH_DAYS:-7}
+
+      # Logging
+      Logging__LogLevel__Default:          ${LOG_LEVEL:-Information}
+      Logging__LogLevel__Microsoft.AspNetCore: Warning
+
+      # CORS — allow the frontend container
+      AllowedOrigins: ${ALLOWED_ORIGINS:-http://localhost,http://frontend}
+
+      # Email (optional)
+      EmailSettings__SmtpHost:     ${SMTP_HOST:-}
+      EmailSettings__SmtpPort:     ${SMTP_PORT:-587}
+      EmailSettings__SmtpUser:     ${SMTP_USER:-}
+      EmailSettings__SmtpPassword: ${SMTP_PASSWORD:-}
+      EmailSettings__FromEmail:    ${FROM_EMAIL:-noreply@taskflow.app}
+
+    ports:
+      - "${BACKEND_PORT:-5000}:8080"   # Expose for direct API testing / Swagger
+    volumes:
+      - backend_logs:/app/logs        # Persist application logs
+    depends_on:
+      sqlserver:
+        condition: service_healthy    # Wait until SQL Server is fully ready
+    networks:
+      - taskflow-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  # ── 3. REACT FRONTEND ──────────────────────────────────────────
+  frontend:
+    build:
+      context:    ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL:   /api/v1       # Relative URL (nginx proxies /api to backend)
+        VITE_APP_NAME:  TaskFlow
+    container_name: taskflow-frontend
+    image: taskflow-frontend:${VERSION:-latest}
+    ports:
+      - "${FRONTEND_PORT:-80}:80"     # Main entry point for users
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - taskflow-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/health.html || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+# ── VOLUMES ───────────────────────────────────────────────────────
+# Named volumes persist data across container restarts.
+# Without volumes, ALL your database data is lost when containers stop!
+volumes:
+  sqlserver_data:
+    name: taskflow-sqlserver-data
+  backend_logs:
+    name: taskflow-backend-logs
+
+# ── NETWORKS ──────────────────────────────────────────────────────
+# Private network — containers talk to each other but are
+# isolated from other Docker containers on your machine.
+networks:
+  taskflow-network:
+    name:   taskflow-network
+    driver: bridge
