@@ -1,8 +1,13 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useForm } from 'react-hook-form';
 import { usersApi } from '@/api';
+import { authApi } from '@/api';
 import Avatar from '@/components/ui/Avatar';
 import Button from '@/components/ui/Button';
+import Modal from '@/components/ui/Modal';
+import Input from '@/components/ui/Input';
+import { Select } from '@/components/ui/Input';
 import { RoleBadge } from '@/components/ui/Badge';
 import { CardSkeleton } from '@/components/ui/PageLoader';
 import { format } from 'date-fns';
@@ -15,10 +20,17 @@ const ROLES = [
   { value: 3, label: 'Collaborator'   },
 ];
 
+const ROLE_OPTIONS = [
+  { value: '1', label: 'Admin' },
+  { value: '2', label: 'Project Manager' },
+  { value: '3', label: 'Collaborator' },
+];
+
 export default function UsersPage() {
-  const [search, setSearch] = useState('');
+  const [search, setSearch]       = useState('');
   const [roleFilter, setRoleFilter] = useState('');
-  const [page, setPage] = useState(1);
+  const [page, setPage]           = useState(1);
+  const [showInvite, setShowInvite] = useState(false);
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -33,6 +45,7 @@ export default function UsersPage() {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       toast.success(`User ${isActive ? 'activated' : 'deactivated'}.`);
     },
+    onError: () => toast.error('Failed to update user status.'),
   });
 
   const assignRoleMutation = useMutation({
@@ -41,10 +54,11 @@ export default function UsersPage() {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       toast.success('Role updated.');
     },
+    onError: () => toast.error('Failed to update role.'),
   });
 
-  const users     = data?.data?.items ?? [];
-  const total     = data?.data?.totalCount ?? 0;
+  const users      = data?.data?.items ?? [];
+  const total      = data?.data?.totalCount ?? 0;
   const totalPages = Math.ceil(total / 12);
 
   return (
@@ -55,7 +69,7 @@ export default function UsersPage() {
           <h1 className="text-2xl font-bold text-white">User Management</h1>
           <p className="text-white/40 text-sm mt-1">{total} total users</p>
         </div>
-        <Button>
+        <Button onClick={() => setShowInvite(true)}>
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
@@ -99,6 +113,10 @@ export default function UsersPage() {
       ) : users.length === 0 ? (
         <div className="glass rounded-2xl p-16 text-center">
           <p className="text-white/50">No users found</p>
+          <button onClick={() => setShowInvite(true)}
+            className="mt-4 text-primary-400 hover:text-primary-300 text-sm font-medium transition-colors">
+            Invite your first user →
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -133,6 +151,16 @@ export default function UsersPage() {
           </div>
         </div>
       )}
+
+      {/* Invite User Modal */}
+      <InviteUserModal
+        isOpen={showInvite}
+        onClose={() => setShowInvite(false)}
+        onSuccess={() => {
+          setShowInvite(false);
+          queryClient.invalidateQueries({ queryKey: ['users'] });
+        }}
+      />
     </div>
   );
 }
@@ -190,5 +218,94 @@ function UserCard({ user, onToggleStatus, onAssignRole, isLoading }) {
         </Button>
       </div>
     </div>
+  );
+}
+
+function InviteUserModal({ isOpen, onClose, onSuccess }) {
+  const { register, handleSubmit, reset, formState: { errors } } = useForm({
+    defaultValues: { roleId: '3' },
+  });
+
+  const inviteMutation = useMutation({
+    mutationFn: (data) => authApi.register({
+      fullName: data.fullName,
+      email:    data.email,
+      password: data.password,
+      roleId:   Number(data.roleId),
+    }),
+    onSuccess: () => {
+      reset();
+      onSuccess();
+      toast.success('User invited successfully! They can now log in.');
+    },
+    onError: (err) => {
+      const msg = err?.response?.data?.message ?? 'Failed to invite user.';
+      toast.error(msg);
+    },
+  });
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Invite New User"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button
+            form="invite-user-form"
+            type="submit"
+            loading={inviteMutation.isPending}
+          >
+            Create Account
+          </Button>
+        </>
+      }
+    >
+      <form
+        id="invite-user-form"
+        onSubmit={handleSubmit((d) => inviteMutation.mutate(d))}
+        className="space-y-4"
+      >
+        <Input
+          label="Full Name"
+          placeholder="e.g. Jane Smith"
+          required
+          error={errors.fullName?.message}
+          {...register('fullName', { required: 'Full name is required' })}
+        />
+        <Input
+          label="Email Address"
+          type="email"
+          placeholder="jane@company.com"
+          required
+          error={errors.email?.message}
+          {...register('email', {
+            required: 'Email is required',
+            pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Enter a valid email' },
+          })}
+        />
+        <Input
+          label="Temporary Password"
+          type="password"
+          placeholder="Min. 8 characters"
+          required
+          error={errors.password?.message}
+          {...register('password', {
+            required: 'Password is required',
+            minLength: { value: 8, message: 'At least 8 characters' },
+          })}
+        />
+        <Select
+          label="Role"
+          options={ROLE_OPTIONS}
+          error={errors.roleId?.message}
+          {...register('roleId', { required: 'Role is required' })}
+        />
+        <p className="text-xs text-white/30 bg-white/5 rounded-xl p-3 border border-white/8">
+          💡 The user will be able to log in immediately with the email and password you set here.
+        </p>
+      </form>
+    </Modal>
   );
 }

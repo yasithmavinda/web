@@ -8,6 +8,7 @@ using TaskFlow.Domain.Entities;
 using TaskFlow.Domain.Exceptions;
 using TaskStatus = TaskFlow.Domain.Enums.TaskStatus;
 using TaskPriority = TaskFlow.Domain.Enums.TaskPriority;
+using System.Security.Claims;
 
 namespace TaskFlow.Application.Services;
 
@@ -30,21 +31,35 @@ public class TaskService : ITaskService
     private readonly ITaskRepository _taskRepo;
     private readonly IProjectRepository _projectRepo;
     private readonly INotificationRepository _notifRepo;
+    private readonly IUserRepository _userRepo;
     private readonly IMapper _mapper;
     private readonly ILogger<TaskService> _log;
 
     public TaskService(ITaskRepository taskRepo, IProjectRepository projectRepo,
-        INotificationRepository notifRepo, IMapper mapper, ILogger<TaskService> log)
+        INotificationRepository notifRepo, IUserRepository userRepo, IMapper mapper, ILogger<TaskService> log)
     {
         _taskRepo = taskRepo; _projectRepo = projectRepo;
-        _notifRepo = notifRepo; _mapper = mapper; _log = log;
+        _notifRepo = notifRepo; _userRepo = userRepo; _mapper = mapper; _log = log;
+    }
+
+    /// <summary>Returns true if the user is an Admin (roleId = 1) — Admins can access all projects.</summary>
+    private async Task<bool> IsAdminAsync(long userId, CancellationToken ct)
+    {
+        var user = await _userRepo.GetByIdAsync(userId, ct);
+        return user?.GetPrimaryRoleId() == 1;
+    }
+
+    private async Task EnsureProjectAccessAsync(long projectId, long userId, CancellationToken ct)
+    {
+        if (await IsAdminAsync(userId, ct)) return; // Admins bypass project membership check
+        if (!await _projectRepo.IsUserMemberAsync(projectId, userId, ct))
+            throw new UnauthorizedException("You are not a member of this project.");
     }
 
     public async Task<TaskDto> GetByIdAsync(long id, long requestingUserId, CancellationToken ct = default)
     {
         var task = await _taskRepo.GetByIdWithDetailsAsync(id, ct) ?? throw new NotFoundException("Task", id);
-        if (!await _projectRepo.IsUserMemberAsync(task.ProjectId, requestingUserId, ct))
-            throw new UnauthorizedException("You are not a member of this project.");
+        await EnsureProjectAccessAsync(task.ProjectId, requestingUserId, ct);
         return _mapper.Map<TaskDto>(task);
     }
 
@@ -60,8 +75,7 @@ public class TaskService : ITaskService
 
     public async Task<TaskDto> CreateAsync(CreateTaskDto dto, long createdBy, CancellationToken ct = default)
     {
-        if (!await _projectRepo.IsUserMemberAsync(dto.ProjectId, createdBy, ct))
-            throw new UnauthorizedException("You are not a member of this project.");
+        await EnsureProjectAccessAsync(dto.ProjectId, createdBy, ct);
 
         if (!Enum.TryParse<TaskStatus>(dto.Status, out var status))
             throw new BadRequestException($"Invalid status: {dto.Status}");
@@ -108,8 +122,7 @@ public class TaskService : ITaskService
     public async Task<TaskDto> UpdateAsync(long taskId, UpdateTaskDto dto, long userId, CancellationToken ct = default)
     {
         var task = await _taskRepo.GetByIdAsync(taskId, ct) ?? throw new NotFoundException("Task", taskId);
-        if (!await _projectRepo.IsUserMemberAsync(task.ProjectId, userId, ct))
-            throw new UnauthorizedException("Not a member of this project.");
+        await EnsureProjectAccessAsync(task.ProjectId, userId, ct);
 
         if (dto.Title != null) task.Title = dto.Title.Trim();
         if (dto.Description != null) task.Description = dto.Description.Trim();
@@ -127,8 +140,7 @@ public class TaskService : ITaskService
     public async Task<TaskDto> UpdateStatusAsync(long taskId, UpdateTaskStatusDto dto, long userId, CancellationToken ct = default)
     {
         var task = await _taskRepo.GetByIdAsync(taskId, ct) ?? throw new NotFoundException("Task", taskId);
-        if (!await _projectRepo.IsUserMemberAsync(task.ProjectId, userId, ct))
-            throw new UnauthorizedException("Not a member of this project.");
+        await EnsureProjectAccessAsync(task.ProjectId, userId, ct);
 
         if (!Enum.TryParse<TaskStatus>(dto.Status, out var newStatus))
             throw new BadRequestException($"Invalid status: {dto.Status}");
@@ -165,8 +177,7 @@ public class TaskService : ITaskService
     public async Task UpdatePositionAsync(long taskId, UpdateTaskPositionDto dto, long userId, CancellationToken ct = default)
     {
         var task = await _taskRepo.GetByIdAsync(taskId, ct) ?? throw new NotFoundException("Task", taskId);
-        if (!await _projectRepo.IsUserMemberAsync(task.ProjectId, userId, ct))
-            throw new UnauthorizedException("Not a member of this project.");
+        await EnsureProjectAccessAsync(task.ProjectId, userId, ct);
 
         task.Position  = dto.Position;
         task.UpdatedAt = DateTime.UtcNow;
@@ -177,8 +188,7 @@ public class TaskService : ITaskService
     public async Task AssignUsersAsync(long taskId, AssignUsersDto dto, long assignedBy, CancellationToken ct = default)
     {
         var task = await _taskRepo.GetByIdWithDetailsAsync(taskId, ct) ?? throw new NotFoundException("Task", taskId);
-        if (!await _projectRepo.IsUserMemberAsync(task.ProjectId, assignedBy, ct))
-            throw new UnauthorizedException("Not a member of this project.");
+        await EnsureProjectAccessAsync(task.ProjectId, assignedBy, ct);
 
         // Remove existing assignments
         foreach (var a in task.Assignments.ToList())
@@ -208,8 +218,7 @@ public class TaskService : ITaskService
     public async Task ArchiveAsync(long taskId, long userId, CancellationToken ct = default)
     {
         var task = await _taskRepo.GetByIdAsync(taskId, ct) ?? throw new NotFoundException("Task", taskId);
-        if (!await _projectRepo.IsUserMemberAsync(task.ProjectId, userId, ct))
-            throw new UnauthorizedException("Not a member of this project.");
+        await EnsureProjectAccessAsync(task.ProjectId, userId, ct);
         task.IsArchived = true; task.UpdatedAt = DateTime.UtcNow;
         await _taskRepo.UpdateAsync(task, ct);
     }
@@ -217,8 +226,7 @@ public class TaskService : ITaskService
     public async Task DeleteAsync(long taskId, long userId, CancellationToken ct = default)
     {
         var task = await _taskRepo.GetByIdAsync(taskId, ct) ?? throw new NotFoundException("Task", taskId);
-        if (!await _projectRepo.IsUserMemberAsync(task.ProjectId, userId, ct))
-            throw new UnauthorizedException("Not a member of this project.");
+        await EnsureProjectAccessAsync(task.ProjectId, userId, ct);
         task.IsArchived = true; task.UpdatedAt = DateTime.UtcNow; // Soft delete via archive
         await _taskRepo.UpdateAsync(task, ct);
         _log.LogInformation("Task {Id} deleted by user {UserId}", taskId, userId);
