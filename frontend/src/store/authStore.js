@@ -85,15 +85,16 @@ export const useAuthStore = create(
         isAuth:       state.isAuth,
       }),
 
-      // ✅ THIS IS THE KEY FIX:
-      // Called automatically by Zustand after it loads saved state from
-      // localStorage. We set isLoading:false so the spinner disappears
-      // and the app either shows the dashboard (if logged in) or
-      // redirects to /login (if not logged in).
       onRehydrateStorage: () => (state, error) => {
-        if (state) {
-          state.setLoaded();
+        if (error) {
+          console.error("Hydration error:", error);
+          // If hydration fails, clear storage to fix corruption
+          localStorage.removeItem('taskflow-auth');
         }
+        // Always finish loading, use setTimeout to avoid React cycle issues during initialization
+        setTimeout(() => {
+          useAuthStore.getState().setLoaded();
+        }, 0);
       },
     }
   )

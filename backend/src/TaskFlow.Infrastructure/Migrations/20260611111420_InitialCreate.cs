@@ -565,9 +565,9 @@ namespace TaskFlow.Infrastructure.Migrations
                 columns: new[] { "RoleId", "CreatedAt", "Description", "IsActive", "RoleName", "UpdatedAt" },
                 values: new object[,]
                 {
-                    { (byte)1, new DateTime(2026, 6, 9, 10, 31, 3, 690, DateTimeKind.Utc).AddTicks(729), "Full system access.", true, "Admin", new DateTime(2026, 6, 9, 10, 31, 3, 690, DateTimeKind.Utc).AddTicks(732) },
-                    { (byte)2, new DateTime(2026, 6, 9, 10, 31, 3, 690, DateTimeKind.Utc).AddTicks(736), "Manage projects and tasks.", true, "ProjectManager", new DateTime(2026, 6, 9, 10, 31, 3, 690, DateTimeKind.Utc).AddTicks(736) },
-                    { (byte)3, new DateTime(2026, 6, 9, 10, 31, 3, 690, DateTimeKind.Utc).AddTicks(738), "Work on assigned tasks.", true, "Collaborator", new DateTime(2026, 6, 9, 10, 31, 3, 690, DateTimeKind.Utc).AddTicks(739) }
+                    { (byte)1, new DateTime(2026, 6, 11, 11, 14, 16, 165, DateTimeKind.Utc).AddTicks(6814), "Full system access.", true, "Admin", new DateTime(2026, 6, 11, 11, 14, 16, 165, DateTimeKind.Utc).AddTicks(6817) },
+                    { (byte)2, new DateTime(2026, 6, 11, 11, 14, 16, 165, DateTimeKind.Utc).AddTicks(6819), "Manage projects and tasks.", true, "ProjectManager", new DateTime(2026, 6, 11, 11, 14, 16, 165, DateTimeKind.Utc).AddTicks(6820) },
+                    { (byte)3, new DateTime(2026, 6, 11, 11, 14, 16, 165, DateTimeKind.Utc).AddTicks(6821), "Work on assigned tasks.", true, "Collaborator", new DateTime(2026, 6, 11, 11, 14, 16, 165, DateTimeKind.Utc).AddTicks(6821) }
                 });
 
             migrationBuilder.CreateIndex(

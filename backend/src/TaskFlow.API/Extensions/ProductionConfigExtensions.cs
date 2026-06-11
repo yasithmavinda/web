@@ -17,7 +17,7 @@ public static class ProductionConfigExtensions
             // Check SQL Server connection
             .AddSqlServer(
                 connectionString:     config.GetConnectionString("DefaultConnection")!,
-                name:                 "sql-server",
+                name:                 "sqlserver",
                 tags:                 new[] { "db", "sql" },
                 timeout:              TimeSpan.FromSeconds(5))
             // Check SignalR (basic liveness)

@@ -13,13 +13,13 @@ export default function LoginPage() {
   // One-click demo login
   const fillDemo = (email) => {
     setValue('email', email);
-    setValue('password', 'Admin@123');
+    setValue('password', 'Password123!');
   };
 
   const demoAccounts = [
     { label: 'Admin', email: 'admin@taskflow.com', color: 'from-violet-500 to-indigo-500' },
-    { label: 'Manager', email: 'pm@taskflow.com', color: 'from-sky-500 to-cyan-500' },
-    { label: 'Dev', email: 'dev@taskflow.com', color: 'from-emerald-500 to-teal-500' },
+    { label: 'Manager', email: 'manager@taskflow.com', color: 'from-sky-500 to-cyan-500' },
+    { label: 'Dev', email: 'collab@taskflow.com', color: 'from-emerald-500 to-teal-500' },
   ];
 
   return (
@@ -42,7 +42,7 @@ export default function LoginPage() {
               onClick={() => {
                 fillDemo(a.email);
                 // Auto-submit after filling
-                setTimeout(() => loginMutation.mutate({ email: a.email, password: 'Admin@123' }), 100);
+                setTimeout(() => loginMutation.mutate({ email: a.email, password: 'Password123!' }), 100);
               }}
               className={`
                 bg-gradient-to-r ${a.color} text-white text-xs font-semibold
@@ -116,7 +116,7 @@ export default function LoginPage() {
       {/* Credentials hint */}
       <div className="mt-5 p-3 rounded-xl bg-white/3 border border-white/8 text-center">
         <p className="text-xs text-white/25">
-          All demo accounts use password: <span className="text-white/40 font-mono">Admin@123</span>
+          All demo accounts use password: <span className="text-white/40 font-mono">Password123!</span>
         </p>
       </div>
     </div>

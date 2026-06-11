@@ -12,7 +12,7 @@ using TaskFlow.Infrastructure.Persistence;
 namespace TaskFlow.Infrastructure.Migrations
 {
     [DbContext(typeof(TaskFlowDbContext))]
-    [Migration("20260609103104_InitialCreate")]
+    [Migration("20260611111420_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -501,29 +501,29 @@ namespace TaskFlow.Infrastructure.Migrations
                         new
                         {
                             Id = (byte)1,
-                            CreatedAt = new DateTime(2026, 6, 9, 10, 31, 3, 690, DateTimeKind.Utc).AddTicks(729),
+                            CreatedAt = new DateTime(2026, 6, 11, 11, 14, 16, 165, DateTimeKind.Utc).AddTicks(6814),
                             Description = "Full system access.",
                             IsActive = true,
                             RoleName = "Admin",
-                            UpdatedAt = new DateTime(2026, 6, 9, 10, 31, 3, 690, DateTimeKind.Utc).AddTicks(732)
+                            UpdatedAt = new DateTime(2026, 6, 11, 11, 14, 16, 165, DateTimeKind.Utc).AddTicks(6817)
                         },
                         new
                         {
                             Id = (byte)2,
-                            CreatedAt = new DateTime(2026, 6, 9, 10, 31, 3, 690, DateTimeKind.Utc).AddTicks(736),
+                            CreatedAt = new DateTime(2026, 6, 11, 11, 14, 16, 165, DateTimeKind.Utc).AddTicks(6819),
                             Description = "Manage projects and tasks.",
                             IsActive = true,
                             RoleName = "ProjectManager",
-                            UpdatedAt = new DateTime(2026, 6, 9, 10, 31, 3, 690, DateTimeKind.Utc).AddTicks(736)
+                            UpdatedAt = new DateTime(2026, 6, 11, 11, 14, 16, 165, DateTimeKind.Utc).AddTicks(6820)
                         },
                         new
                         {
                             Id = (byte)3,
-                            CreatedAt = new DateTime(2026, 6, 9, 10, 31, 3, 690, DateTimeKind.Utc).AddTicks(738),
+                            CreatedAt = new DateTime(2026, 6, 11, 11, 14, 16, 165, DateTimeKind.Utc).AddTicks(6821),
                             Description = "Work on assigned tasks.",
                             IsActive = true,
                             RoleName = "Collaborator",
-                            UpdatedAt = new DateTime(2026, 6, 9, 10, 31, 3, 690, DateTimeKind.Utc).AddTicks(739)
+                            UpdatedAt = new DateTime(2026, 6, 11, 11, 14, 16, 165, DateTimeKind.Utc).AddTicks(6821)
                         });
                 });
 

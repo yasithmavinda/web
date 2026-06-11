@@ -37,7 +37,7 @@ public class TaskFlowDbContext : DbContext
         {
             e.ToTable("Users", "auth");
             e.HasKey(u => u.Id);
-            e.Property(u => u.Id).HasColumnName("UserId").UseIdentityColumn();
+            e.Property(u => u.Id).HasColumnName("UserId").ValueGeneratedOnAdd();
             e.Property(u => u.FullName).IsRequired().HasMaxLength(150);
             e.Property(u => u.Email).IsRequired().HasMaxLength(254);
             e.Property(u => u.PasswordHash).IsRequired().HasMaxLength(64);
@@ -130,7 +130,7 @@ public class TaskFlowDbContext : DbContext
         {
             e.ToTable("Projects");
             e.HasKey(p => p.Id);
-            e.Property(p => p.Id).HasColumnName("ProjectId").UseIdentityColumn();
+            e.Property(p => p.Id).HasColumnName("ProjectId").ValueGeneratedOnAdd();
             e.Property(p => p.Name).IsRequired().HasMaxLength(200);
             e.Property(p => p.Description).HasMaxLength(2000);
             e.Property(p => p.ColorTag).HasMaxLength(7).HasDefaultValue("#6366F1");
@@ -157,7 +157,7 @@ public class TaskFlowDbContext : DbContext
         {
             e.ToTable("Tasks");
             e.HasKey(t => t.Id);
-            e.Property(t => t.Id).HasColumnName("TaskId").UseIdentityColumn();
+            e.Property(t => t.Id).HasColumnName("TaskId").ValueGeneratedOnAdd();
             e.Property(t => t.Title).IsRequired().HasMaxLength(500);
             e.Property(t => t.Description).HasMaxLength(10000);
             e.Property(t => t.Status).HasConversion<string>();
@@ -201,7 +201,7 @@ public class TaskFlowDbContext : DbContext
         {
             e.ToTable("Tags");
             e.HasKey(t => t.Id);
-            e.Property(t => t.Id).HasColumnName("TagId").UseIdentityColumn();
+            e.Property(t => t.Id).HasColumnName("TagId").ValueGeneratedOnAdd();
             e.Property(t => t.Name).IsRequired().HasMaxLength(50);
             e.Property(t => t.Color).HasMaxLength(7).HasDefaultValue("#6366F1");
             e.HasOne(t => t.Project).WithMany(p => p.Tags).HasForeignKey(t => t.ProjectId).OnDelete(DeleteBehavior.Cascade);
@@ -220,7 +220,7 @@ public class TaskFlowDbContext : DbContext
         {
             e.ToTable("Comments");
             e.HasKey(c => c.Id);
-            e.Property(c => c.Id).HasColumnName("CommentId").UseIdentityColumn();
+            e.Property(c => c.Id).HasColumnName("CommentId").ValueGeneratedOnAdd();
             e.Property(c => c.Body).IsRequired().HasMaxLength(5000);
             e.HasOne(c => c.User).WithMany(u => u.Comments).HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(c => c.ParentComment).WithMany(c => c.Replies).HasForeignKey(c => c.ParentCommentId).OnDelete(DeleteBehavior.Restrict);
@@ -231,7 +231,7 @@ public class TaskFlowDbContext : DbContext
         {
             e.ToTable("Attachments");
             e.HasKey(a => a.Id);
-            e.Property(a => a.Id).HasColumnName("AttachmentId").UseIdentityColumn();
+            e.Property(a => a.Id).HasColumnName("AttachmentId").ValueGeneratedOnAdd();
             e.Property(a => a.FileName).IsRequired().HasMaxLength(260);
             e.Property(a => a.MimeType).IsRequired().HasMaxLength(100);
             e.Property(a => a.StorageUrl).IsRequired().HasMaxLength(1000);

@@ -37,7 +37,17 @@ public class User : BaseEntity
     public NotificationSetting?      NotificationSettings { get; set; }
 
     // Helpers
-    public string GetPrimaryRoleName() => UserRoles.FirstOrDefault()?.Role?.RoleName ?? "Collaborator";
+    public string GetPrimaryRoleName() 
+    {
+        var role = UserRoles.FirstOrDefault();
+        if (role?.Role?.RoleName != null) return role.Role.RoleName;
+        return role?.RoleId switch
+        {
+            1 => "Admin",
+            2 => "ProjectManager",
+            _ => "Collaborator"
+        };
+    }
     public byte   GetPrimaryRoleId()   => UserRoles.FirstOrDefault()?.RoleId ?? 3;
 
     public void IncrementFailedLogins()
