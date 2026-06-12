@@ -49,8 +49,12 @@ public class TasksController : BaseApiController
     /// <summary>Create a new task. ProjectManager or Admin only.</summary>
     [HttpPost]
     [Authorize(Policy = "RequireManager")]
-    public async Task<IActionResult> Create([FromBody] CreateTaskDto dto, CancellationToken ct)
+    public async Task<IActionResult> Create([FromBody] CreateTaskDto dto, [FromServices] FluentValidation.IValidator<CreateTaskDto> validator, CancellationToken ct)
     {
+        var valResult = await validator.ValidateAsync(dto, ct);
+        if (!valResult.IsValid)
+            throw new FluentValidation.ValidationException(valResult.Errors);
+
         var task = await _taskSvc.CreateAsync(dto, CurrentUserId!.Value, ct);
         // Broadcast real-time update to all project members
         await _hub.Clients.Group($"project-{dto.ProjectId}").SendAsync("TaskCreated", task, ct);

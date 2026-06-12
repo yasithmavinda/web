@@ -206,7 +206,11 @@ function CreateTaskModal({ isOpen, onClose, onSuccess }) {
   const createMutation = useMutation({
     mutationFn: tasksApi.create,
     onSuccess: () => { reset(); onSuccess(); toast.success('Task created!'); },
-    onError:   () => toast.error('Failed to create task.'),
+    onError:   (error) => {
+      console.log(error.response?.data);
+      const msg = error.response?.data?.message || 'Failed to create task.';
+      toast.error(msg);
+    },
   });
 
   const projectOptions = (projects?.data?.items ?? []).map(p => ({ value: p.projectId, label: p.name }));
@@ -223,7 +227,16 @@ function CreateTaskModal({ isOpen, onClose, onSuccess }) {
       }
     >
       <form id="create-task-form"
-        onSubmit={handleSubmit((d) => createMutation.mutate({ ...d, projectId: Number(d.projectId) }))}
+        onSubmit={handleSubmit((d) => {
+          const payload = {
+            ...d,
+            projectId: Number(d.projectId),
+            dueDate: d.dueDate || null,
+            status: d.status || 'Backlog',
+            priority: d.priority || 'Medium',
+          };
+          createMutation.mutate(payload);
+        })}
         className="space-y-4">
         <Input label="Task Title" required placeholder="What needs to be done?"
           error={errors.title?.message}

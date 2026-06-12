@@ -57,14 +57,8 @@ export function useAuth() {
   const queryClient         = useQueryClient();
   const from = location.state?.from?.pathname ?? '/dashboard';
 
-  // LOGIN
   const loginMutation = useMutation({
     mutationFn: async ({ email, password }) => {
-      const demo = tryDemoLogin(email, password);
-      if (demo) {
-        await new Promise((r) => setTimeout(r, 700));
-        return { data: demo };
-      }
       return authApi.login({ email, password });
     },
     onSuccess: (res) => {
@@ -74,7 +68,12 @@ export function useAuth() {
       navigate(from, { replace: true });
     },
     onError: (err) => {
-      toast.error(err.response?.data?.message ?? 'Invalid email or password.');
+      const msg = err.response?.data?.message;
+      if (msg) {
+        toast.error(msg);
+      } else {
+        toast.error('Network Error: Could not connect to the backend server.');
+      }
     },
   });
 

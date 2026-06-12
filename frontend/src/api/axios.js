@@ -12,7 +12,7 @@ import { useAuthStore } from '@/store/authStore';
  *   4. Response interceptor — auto-refresh expired tokens (transparent to the rest of the app)
  */
 const api = axios.create({
-  baseURL: `${import.meta.env.VITE_API_URL ?? 'http://localhost:5000'}/api/v1`,
+  baseURL: import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api/v1` : '/api/v1',
   headers: { 'Content-Type': 'application/json' },
   timeout: 15000, // Fail if server doesn't respond in 15 seconds
 });
